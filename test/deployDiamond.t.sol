@@ -120,6 +120,8 @@ contract DiamondDeployer is Test, IDiamondCut {
         switchSigner(A);
         erc721Token.mint();
         erc721Token.approve(address(diamond), 1);
+        // switchSigner(B);
+
         boundAuction.createAuction(address(erc721Token), 1, 1e18, 2 days);
         // boundAuction.getAuction(0);
 

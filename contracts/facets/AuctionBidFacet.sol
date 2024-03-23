@@ -16,6 +16,10 @@ contract AuctionBidFacet {
         uint _closeTime
     ) external {
         require(_contractAddress != address(0), "INVALID_CONTRACT_ADDRESS");
+        require(
+            INFT(_contractAddress).ownerOf(_tokenId) == msg.sender,
+            "NOT_OWNER"
+        );
         require(_closeTime > block.timestamp, "INVALID_CLOSE_TIME");
         INFT(_contractAddress).transferFrom(
             msg.sender,
