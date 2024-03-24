@@ -10,7 +10,7 @@ import "../contracts/facets/ERC20Facet.sol";
 // import "../contracts/facets/StakingFacet.sol";
 import "../contracts/facets/AuctionBidFacet.sol";
 
-import "../contracts/ChainBattles.sol";
+import "../contracts/ERC721Token.sol";
 import "forge-std/Test.sol";
 import "../contracts/Diamond.sol";
 
@@ -27,7 +27,7 @@ contract DiamondDeployer is Test, IDiamondCut {
     ERC20Facet erc20Facet;
     // StakingFacet sFacet;
     AuctionBidFacet aFacet;
-    ChainBattles erc721Token;
+    ERC721Token erc721Token;
 
     address A = address(0xa);
     address B = address(0xb);
@@ -44,7 +44,7 @@ contract DiamondDeployer is Test, IDiamondCut {
         ownerF = new OwnershipFacet();
         erc20Facet = new ERC20Facet();
         aFacet = new AuctionBidFacet();
-        erc721Token = new ChainBattles();
+        erc721Token = new ERC721Token();
 
         //upgrade diamond with facets
 

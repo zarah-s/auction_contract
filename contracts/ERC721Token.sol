@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/utils/Base64.sol";
 
-contract ChainBattles is ERC721URIStorage {
+contract ERC721Token is ERC721URIStorage {
     using Strings for uint256;
     // using Counters for Counters.Counter;
     // Counters.Counter private _tokenIds;
