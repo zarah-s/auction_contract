@@ -85,8 +85,6 @@ contract DiamondDeployer is Test, IDiamondCut {
         //upgrade diamond
         IDiamondCut(address(diamond)).diamondCut(cut, address(0x0), "");
 
-        //set rewardToken
-        // diamond.setRewardToken(address(wow));
         A = mkaddr("staker a");
         B = mkaddr("staker b");
         C = mkaddr("staker c");
@@ -98,27 +96,6 @@ contract DiamondDeployer is Test, IDiamondCut {
         boundAuction = AuctionBidFacet(address(diamond));
         boundERC = ERC20Facet(address(diamond));
     }
-
-    // function testStaking() public {
-    //     switchSigner(A);
-    //     boundStaking.stake(50_000_000e18);
-
-    //     vm.warp(3154e7);
-    //     boundStaking.checkRewards(A);
-    //     switchSigner(B);
-
-    //     vm.expectRevert(
-    //         abi.encodeWithSelector(StakingFacet.NoMoney.selector, 0)
-    //     );
-    //     boundStaking.unstake(5);
-
-    //     bytes32 value = vm.load(
-    //         address(diamond),
-    //         bytes32(abi.encodePacked(uint256(2)))
-    //     );
-    //     uint256 decodevalue = abi.decode(abi.encodePacked(value), (uint256));
-    //     console.log(decodevalue);
-    // }
 
     function testRevertIfTokenAddressIsZero() public {
         vm.expectRevert("INVALID_CONTRACT_ADDRESS");
@@ -264,7 +241,6 @@ contract DiamondDeployer is Test, IDiamondCut {
 
     function testTokenTransferOnCloseBid() external {
         ERC20Facet(address(diamond)).mintTo(C);
-
         switchSigner(A);
         uint oldABalance = boundERC.balanceOf(A);
         erc721Token.mint();
@@ -272,13 +248,10 @@ contract DiamondDeployer is Test, IDiamondCut {
         boundAuction.createAuction(address(erc721Token), 1, 2e18, 2 days);
         switchSigner(B);
         boundAuction.bid(0, 2e18);
-
         switchSigner(C);
         boundAuction.bid(0, 3e18);
-
         vm.warp(2 days);
         boundAuction.closeAuction(0);
-
         assertEq(
             boundERC.balanceOf(A),
             oldABalance + (3e18 - ((10 * 3e18) / 100))
