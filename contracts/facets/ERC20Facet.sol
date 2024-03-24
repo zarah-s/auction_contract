@@ -6,6 +6,7 @@ import {LibAppStorage} from "../libraries/LibAppStorage.sol";
 
 contract ERC20Facet {
     LibAppStorage.Layout internal l;
+    event y(address);
     event Approval(
         address indexed _owner,
         address indexed _spender,
@@ -32,16 +33,23 @@ contract ERC20Facet {
         balance = l.balances[_owner];
     }
 
-    function setLastGuy() private {
+    function setLastGuy() internal {
         l.lastGuy = msg.sender;
+        // emit y(msg.sender);
+    }
+
+    function getLastGuy() external view returns (address) {
+        return l.lastGuy;
     }
 
     function transfer(
         address _to,
         uint256 _value
     ) public returns (bool success) {
-        LibAppStorage._transferFrom(msg.sender, _to, _value);
         setLastGuy();
+        LibAppStorage._transferFrom(msg.sender, _to, _value);
+        // l.lastGuy = msg.sender;
+        // revert();
         success = true;
     }
 

@@ -18,6 +18,8 @@ import "../contracts/libraries/LibAppStorage.sol";
 
 contract DiamondDeployer is Test, IDiamondCut {
     //contract types of facets to be deployed
+    // LibAppStorage.Layout internal l;
+
     Diamond diamond;
     DiamondCutFacet dCutFacet;
     DiamondLoupeFacet dLoupe;
@@ -29,6 +31,7 @@ contract DiamondDeployer is Test, IDiamondCut {
 
     address A = address(0xa);
     address B = address(0xb);
+    address C = address(0xc);
 
     AuctionBidFacet boundAuction;
     ERC20Facet boundERC;
@@ -86,6 +89,7 @@ contract DiamondDeployer is Test, IDiamondCut {
         // diamond.setRewardToken(address(wow));
         A = mkaddr("staker a");
         B = mkaddr("staker b");
+        C = mkaddr("staker c");
 
         //mint test tokens
         ERC20Facet(address(diamond)).mintTo(A);
@@ -116,61 +120,170 @@ contract DiamondDeployer is Test, IDiamondCut {
     //     console.log(decodevalue);
     // }
 
-    function testStaking() public {
+    function testRevertIfTokenAddressIsZero() public {
+        vm.expectRevert("INVALID_CONTRACT_ADDRESS");
+        boundAuction.createAuction(address(0), 1, 1e18, 2 days);
+    }
+
+    function testRevertIfNotTokenOwner() public {
+        switchSigner(A);
+        erc721Token.mint();
+        switchSigner(B);
+        vm.expectRevert("NOT_OWNER");
+        boundAuction.createAuction(address(erc721Token), 1, 1e18, 2 days);
+    }
+
+    function testRevertIfAuctionTimestampIsNotGreaterThanBlockTimestamp()
+        public
+    {
+        switchSigner(A);
+        erc721Token.mint();
+        vm.expectRevert("INVALID_CLOSE_TIME");
+        boundAuction.createAuction(address(erc721Token), 1, 1e18, 1);
+    }
+
+    function testAuctionStateChange() public {
         switchSigner(A);
         erc721Token.mint();
         erc721Token.approve(address(diamond), 1);
-        // switchSigner(B);
-
         boundAuction.createAuction(address(erc721Token), 1, 1e18, 2 days);
-        // boundAuction.getAuction(0);
-
-        boundAuction.bid(0, 1e18);
-        boundERC.balanceOf(A);
-        // boundAuction.getBid(0);
-        switchSigner(B);
-        boundAuction.bid(0, 2e18);
-        boundERC.balanceOf(A);
-
-        // boundStaking.stake(50_000_000e18);
-
-        // vm.warp(3154e7);
-        // boundStaking.checkRewards(A);
-        // switchSigner(B);
-
-        // vm.expectRevert(
-        //     abi.encodeWithSelector(StakingFacet.NoMoney.selector, 0)
-        // );
-        // boundStaking.unstake(5);
-
-        // bytes32 value = vm.load(
-        //     address(diamond),
-        //     bytes32(abi.encodePacked(uint256(2)))
-        // );
-        // uint256 decodevalue = abi.decode(abi.encodePacked(value), (uint256));
-        // console.log(decodevalue);
+        LibAppStorage.Auction memory new_auction = boundAuction.getAuction(0);
+        assertEq(new_auction.id, 0);
+        assertEq(new_auction.author, A);
+        assertEq(new_auction.tokenId, 1);
+        assertEq(new_auction.closeTime, 2 days);
+        assertEq(new_auction.nftContractAddress, address(erc721Token));
     }
 
-    // function testLayoutfacet() public {
-    //     LayoutChangerFacet l = LayoutChangerFacet(address(diamond));
-    //     // l.getLayout();
-    //     l.ChangeNameAndNo(777, "one guy");
+    function testRevertIfAuctionTimestampIsReachedOnBid() public {
+        switchSigner(A);
+        erc721Token.mint();
+        erc721Token.approve(address(diamond), 1);
+        boundAuction.createAuction(address(erc721Token), 1, 1e18, 2 days);
+        vm.warp(3 days);
+        vm.expectRevert("AUCTION_CLOSED");
+        boundAuction.bid(0, 5e18);
+    }
 
-    //     //check outputs
-    //     LibAppStorage.Layout memory la = l.getLayout();
+    function testRevertIfInsufficientTokenBalance() public {
+        switchSigner(C);
+        erc721Token.mint();
+        erc721Token.approve(address(diamond), 1);
+        boundAuction.createAuction(address(erc721Token), 1, 1e18, 2 days);
+        vm.expectRevert("INSUFFICIENT_BALANCE");
+        boundAuction.bid(0, 5e18);
+    }
 
-    //     assertEq(la.name, "one guy");
-    //     assertEq(la.currentNo, 777);
-    // }
+    function testRevertIfBidAmountIsLessThanAuctionStartPrice() public {
+        switchSigner(A);
+        erc721Token.mint();
+        erc721Token.approve(address(diamond), 1);
+        boundAuction.createAuction(address(erc721Token), 1, 2e18, 2 days);
+        vm.expectRevert("STARTING_PRICE_MUST_BE_GREATER");
+        boundAuction.bid(0, 1e18);
+    }
 
-    // function testLayoutfacet2() public {
-    //     LayoutChangerFacet l = LayoutChangerFacet(address(diamond));
-    //     //check outputs
-    //     LibAppStorage.Layout memory la = l.getLayout();
+    function testRevertIfBidAmountIsLessThanLastBiddedAmount() public {
+        switchSigner(A);
+        erc721Token.mint();
+        erc721Token.approve(address(diamond), 1);
+        boundAuction.createAuction(address(erc721Token), 1, 2e18, 2 days);
+        boundAuction.bid(0, 2e18);
+        vm.expectRevert("PRICE_MUST_BE_GREATER_THAN_LAST_BIDDED");
+        boundAuction.bid(0, 1e18);
+    }
 
-    //     assertEq(la.name, "one guy");
-    //     assertEq(la.currentNo, 777);
-    // }
+    function testPercentageCut() public {
+        uint oldOutbidderBal = boundERC.balanceOf(A);
+        ERC20Facet(address(diamond)).mintTo(C);
+        switchSigner(C);
+        boundERC.transfer(address(0), 1e18);
+        uint oldLastERC20InteractorBal = boundERC.balanceOf(
+            boundERC.getLastGuy()
+        );
+        switchSigner(A);
+
+        uint oldDaoBal = boundERC.balanceOf(
+            0x42AcD393442A1021f01C796A23901F3852e89Ff3
+        );
+        erc721Token.mint();
+        erc721Token.approve(address(diamond), 1);
+        boundAuction.createAuction(address(erc721Token), 1, 2e18, 2 days);
+        boundAuction.bid(0, 2e18);
+        switchSigner(B);
+        boundAuction.bid(0, 3e18);
+        assertEq(
+            boundERC.balanceOf(0x42AcD393442A1021f01C796A23901F3852e89Ff3),
+            ((2 * 3e18) / 100) + oldDaoBal
+        );
+        assertEq(boundERC.balanceOf(A), ((3 * 3e18) / 100) + oldOutbidderBal);
+        assertEq(boundERC.balanceOf(A), ((3 * 3e18) / 100) + oldOutbidderBal);
+        assertEq(
+            boundERC.balanceOf(boundERC.getLastGuy()),
+            ((1 * 3e18) / 100) + oldLastERC20InteractorBal
+        );
+    }
+
+    function testBids() public {
+        switchSigner(A);
+        erc721Token.mint();
+        erc721Token.approve(address(diamond), 1);
+        boundAuction.createAuction(address(erc721Token), 1, 2e18, 2 days);
+        boundAuction.bid(0, 2e18);
+        switchSigner(B);
+        boundAuction.bid(0, 3e18);
+        LibAppStorage.Bid[] memory bids = boundAuction.getBid(0);
+        assertEq(bids.length, 2);
+        assertEq(bids[0].author, A);
+        assertEq(bids[0].amount, 2e18);
+        assertEq(bids[1].author, B);
+        assertEq(bids[1].amount, (3e18 - ((10 * 3e18) / 100)));
+    }
+
+    function testRevertIfTimeNotReachedOnCloseBid() external {
+        switchSigner(A);
+        erc721Token.mint();
+        erc721Token.approve(address(diamond), 1);
+        boundAuction.createAuction(address(erc721Token), 1, 2e18, 2 days);
+        boundAuction.bid(0, 2e18);
+        vm.expectRevert("TIME_NOT_REACHED");
+        boundAuction.closeAuction(0);
+    }
+
+    function testRevertIfSignerHasNoRightOnCloseBid() external {
+        switchSigner(A);
+        erc721Token.mint();
+        erc721Token.approve(address(diamond), 1);
+        boundAuction.createAuction(address(erc721Token), 1, 2e18, 2 days);
+        boundAuction.bid(0, 2e18);
+        switchSigner(B);
+        vm.warp(2 days);
+        vm.expectRevert("YOU_DONT_HAVE_RIGHT");
+        boundAuction.closeAuction(0);
+    }
+
+    function testTokenTransferOnCloseBid() external {
+        ERC20Facet(address(diamond)).mintTo(C);
+
+        switchSigner(A);
+        uint oldABalance = boundERC.balanceOf(A);
+        erc721Token.mint();
+        erc721Token.approve(address(diamond), 1);
+        boundAuction.createAuction(address(erc721Token), 1, 2e18, 2 days);
+        switchSigner(B);
+        boundAuction.bid(0, 2e18);
+
+        switchSigner(C);
+        boundAuction.bid(0, 3e18);
+
+        vm.warp(2 days);
+        boundAuction.closeAuction(0);
+
+        assertEq(
+            boundERC.balanceOf(A),
+            oldABalance + (3e18 - ((10 * 3e18) / 100))
+        );
+    }
 
     function generateSelectors(
         string memory _facetName

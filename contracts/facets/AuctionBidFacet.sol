@@ -39,18 +39,67 @@ contract AuctionBidFacet {
         l.auctions.push(_newAuction);
     }
 
-    function calculatePercentageCut(uint amount) private pure returns (uint) {
+    function calculatePercentageCut(uint amount) internal pure returns (uint) {
         return (10 * amount) / 100;
+    }
+
+    // Function to distribute the tax according to the breakdown
+    function distributeTax(
+        uint _tax,
+        address _outbidBidder,
+        address _lastERC20Interactor
+    ) internal {
+        // Calculate each portion of the tax
+        uint toBurn = (_tax * 20) / 100; // 2% burned
+        uint toDAO = (_tax * 20) / 100; // 2% to DAO Wallet
+        uint toOutbidBidder = (_tax * 30) / 100; // 3% back to the outbid bidder
+        uint toTeam = (_tax * 20) / 100; // 2% to Team Wallet
+        uint toInteractor = (_tax * 10) / 100; // 1% to Interactor Wallet
+
+        // Simulate burning by just not transferring the 'toBurn' amount anywhere
+        // burnedAmount = toBurn;
+
+        // Transfer the respective amounts to the specified wallets
+        LibAppStorage._transferFrom(
+            address(0),
+            address(0x42AcD393442A1021f01C796A23901F3852e89Ff3), /// DAO
+            toDAO
+        );
+
+        LibAppStorage._transferFrom(
+            address(0),
+            _outbidBidder, /// OUTBIDDER
+            toOutbidBidder
+        );
+
+        LibAppStorage._transferFrom(
+            address(0),
+            address(0), /// TOTEAM
+            toTeam
+        );
+
+        LibAppStorage._transferFrom(
+            address(0),
+            address(0), /// TOTEAM
+            toBurn
+        );
+
+        LibAppStorage._transferFrom(
+            address(0),
+            _lastERC20Interactor, /// TO LAST INTERACTOR
+            toInteractor
+        );
     }
 
     function bid(uint auctionId, uint price) external {
         require(!l.auctions[auctionId].closed, "AUCTION_CLOSED");
+        require(
+            block.timestamp < l.auctions[auctionId].closeTime,
+            "AUCTION_CLOSED"
+        );
         require(l.balances[msg.sender] > price, "INSUFFICIENT_BALANCE");
-        // LibAppStorage.Bid storage bids = l.bids[auctionId];
 
-        // emit y(l.bids[auctionId].length);
         if (l.bids[auctionId].length == 0) {
-            // emit y(price);
             require(
                 price >= l.auctions[auctionId].startingPrice,
                 "STARTING_PRICE_MUST_BE_GREATER"
@@ -68,11 +117,10 @@ contract AuctionBidFacet {
             );
 
             uint percentageCut = calculatePercentageCut(price);
-            LibAppStorage._transferFrom(
-                address(this),
+            distributeTax(
+                percentageCut,
                 l.bids[auctionId][l.bids[auctionId].length - 1].author,
-                l.bids[auctionId][l.bids[auctionId].length - 1].amount +
-                    percentageCut
+                l.lastGuy
             );
 
             LibAppStorage.Bid memory _newBid = LibAppStorage.Bid({
@@ -88,6 +136,7 @@ contract AuctionBidFacet {
         LibAppStorage.Auction storage auction = l.auctions[auctionId];
 
         require(!auction.closed, "AUCTION_CLOSED");
+        require(block.timestamp >= auction.closeTime, "TIME_NOT_REACHED");
         require(
             l.bids[auctionId][l.bids[auctionId].length - 1].author ==
                 msg.sender ||
